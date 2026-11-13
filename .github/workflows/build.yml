@@ -70,14 +70,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="5.1.2-mc26.3"
+          # Every build gets its own tag and its own release entry; the old tag is never
+          # overwritten, so each jar stays downloadable by the tag it was built from.
+          stamp=$(date -u +%Y%m%d-%H%M)
+          tag="5.1.2-mc26.3-${stamp}"
           notes="Unofficial Hold My Items build for Minecraft 26.3 (Fabric). Needs Fabric Loader 0.19.3+, Fabric API and Java 25. Not play-tested on 26.3 yet; report problems as issues."
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" dist/holdmyitems-5.1.2-mc26.3.jar --clobber
-          else
-            gh release create "$tag" dist/holdmyitems-5.1.2-mc26.3.jar \
-              --target "${{ github.sha }}" \
-              --prerelease \
-              --title "Hold My Items 5.1.2 for Minecraft 26.3 (unofficial)" \
-              --notes "$notes"
-          fi
+          gh release create "$tag" dist/holdmyitems-5.1.2-mc26.3.jar \
+            --target "${{ github.sha }}" \
+            --prerelease \
+            --title "Hold My Items 5.1.2 for Minecraft 26.3 (unofficial) $tag" \
+            --notes "$notes"
