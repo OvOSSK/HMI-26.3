@@ -22,6 +22,7 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.FirstPersonHandsAndItemsRenderer;
 import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
 import net.minecraft.client.renderer.blockentity.state.BellRenderState;
 import net.minecraft.client.renderer.item.ItemStackRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
@@ -29,11 +30,13 @@ import net.minecraft.client.renderer.state.level.FirstPersonHandsAndItemsRenderS
 import net.minecraft.client.renderer.state.level.PlayerRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
@@ -112,6 +115,29 @@ public abstract class HeldItemRendererMixin {
          this.minecraft.getItemModelResolver().updateForLiving(renderState, stack, context, entity);
          renderState.submit(matrices, queue, light, OverlayTexture.NO_OVERLAY, 0);
       }
+   }
+
+   // 箱子类方块（潜影盒、箱子、末影箱、饰纹陶罐、附魔台…）在 26.x 没有烘焙好的 blockstate 几何，
+   // 它们的模型是内建在 BuiltInBlockModels 里的 SpecialModelRenderer，只有物品模型那条管线
+   // （ItemStackRenderState 的 special layer）能画出来。走 BlockStateModelSet 的烘焙四边面
+   // collectParts 会拿到空列表，所以以前拿这些方块当方块渲染时屏幕上什么都没有。
+   // 这里顺着一层判断：方块真的有烘焙几何才走方块路径，没有的落回物品模型路径，由物品模型自带的
+   // special renderer 画出来（旗帜、头颅本来就是这么处理的）。
+   @Unique
+   private boolean hmi$blockHasBakedGeometry(BlockState blockState) {
+      List<BlockStateModelPart> parts = new ArrayList<>();
+      this.minecraft.getModelManager().getBlockStateModelSet().get(blockState).collectParts(RandomSource.create(42L), parts);
+      for (BlockStateModelPart part : parts) {
+         for (Direction direction : Direction.values()) {
+            if (!part.getQuads(direction).isEmpty()) {
+               return true;
+            }
+         }
+         if (!part.getQuads(null).isEmpty()) {
+            return true;
+         }
+      }
+      return false;
    }
 
    @Unique
@@ -508,7 +534,8 @@ public abstract class HeldItemRendererMixin {
             && !item.is(Items.REDSTONE)
             && !item.is(ItemTags.BANNERS)
             && !item.is(ItemTags.SKULLS)
-            && GlobalsStorage.renderAsBlock.getOrDefault(item.getItem().toString(), true)) {
+            && GlobalsStorage.renderAsBlock.getOrDefault(item.getItem().toString(), true)
+            && hmi$blockHasBakedGeometry(Block.byItem(item.getItem()).defaultBlockState())) {
             swingProgress = 0.0F;
             BlockState blockState = Block.byItem(item.getItem()).defaultBlockState();
             this.itemPose(
