@@ -64,7 +64,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 // PORT-26.3: ItemInHandRenderer became FirstPersonHandsAndItemsRenderer and now works from
 // render-state objects (PlayerRenderState / FirstPersonHandsAndItemsRenderState) instead of
@@ -402,15 +403,17 @@ public abstract class HeldItemRendererMixin {
       }
    }
 
-   @Redirect(
-      method = {"submitHandsWithItems(FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/level/PlayerRenderState;Lnet/minecraft/client/renderer/state/level/FirstPersonHandsAndItemsRenderState;)V"},
+   // Iris filters hands for its solid and translucent passes at the head of this method.
+   // Take over when vanilla selects the hand, after Iris and vanilla's early guards.
+   @Inject(
+      method = "submitArmWithItem",
       at = @At(
-         value = "INVOKE",
-         target = "Lnet/minecraft/client/renderer/FirstPersonHandsAndItemsRenderer;submitArmWithItem(Lnet/minecraft/client/renderer/state/level/PlayerRenderState;Lnet/minecraft/client/renderer/state/level/FirstPersonHandsAndItemsRenderState;FFLnet/minecraft/world/InteractionHand;FLnet/minecraft/world/item/ItemStack;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;I)V"
-      )
+         value = "FIELD",
+         target = "Lnet/minecraft/world/InteractionHand;MAIN_HAND:Lnet/minecraft/world/InteractionHand;"
+      ),
+      cancellable = true
    )
    private void renderOverhaul(
-      FirstPersonHandsAndItemsRenderer instance,
       PlayerRenderState playerState,
       FirstPersonHandsAndItemsRenderState handsState,
       float tickProgress,
@@ -421,8 +424,10 @@ public abstract class HeldItemRendererMixin {
       float equipProgress,
       PoseStack matrices,
       SubmitNodeCollector orderedRenderCommandQueue,
-      int light
+      int light,
+      CallbackInfo ci
    ) throws ScriptException, NoSuchMethodException {
+      ci.cancel();
       AbstractClientPlayer player = this.minecraft.player;
       if (player != null && !player.isScoping()) {
          ((ItemStackAccessor)(Object)item).hMI5_0$setTransform(-1);
